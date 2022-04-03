@@ -68,9 +68,7 @@ pub enum TypeModifier {
     Reference,
 }
 
-///
 /// Holds the data for a variable. It's name and it's type and additional flags
-///
 #[derive(Debug, Clone)]
 pub struct Variable {
     /// Documentation
@@ -95,9 +93,7 @@ pub struct Variable {
     pub optional: bool,
 }
 
-///
 /// Default implementation for Variable
-///
 impl Default for Variable {
     fn default() -> Self {
         Variable {
@@ -139,8 +135,6 @@ pub struct Function {
     pub def_file: String,
     /// Name of the function
     pub name: String,
-    /// Name of the C function
-    pub c_name: String,
     /// Function argumnts
     pub function_args: Vec<Variable>,
     /// Return value
@@ -157,7 +151,6 @@ impl Default for Function {
         Function {
             doc_comments: Vec::new(),
             name: String::new(),
-            c_name: String::new(),
             def_file: String::new(),
             function_args: Vec::new(),
             return_val: None,
@@ -270,9 +263,7 @@ pub enum ApigenError {
 
 pub type Result<T> = std::result::Result<T, ApigenError>;
 
-///
 /// Checks if name is a primitive
-///
 fn is_primitve(name: &str) -> bool {
     PRMITIVE_TYPES.iter().any(|&type_name| type_name == name)
 }
@@ -281,9 +272,7 @@ fn is_primitve(name: &str) -> bool {
 #[grammar = "api.pest"]
 pub struct ApiParser;
 
-///
 /// Build struct info for a parsed API def file
-///
 impl ApiParser {
     pub fn parse_file<P: AsRef<Path>>(path: P) -> Result<ApiDef> {
         let mut buffer = String::new();
@@ -370,9 +359,8 @@ impl ApiParser {
 
         Ok(api_def)
     }
-    ///
+
     /// Check if the enum values are in a single sequnce
-    ///
     fn check_sequential(enum_def: &Enum) -> bool {
         if enum_def.entries.is_empty() {
             return false;
@@ -391,9 +379,7 @@ impl ApiParser {
         true
     }
 
-    ///
     /// Check if the enum values overlaps
-    ///
     fn check_overlapping(enum_def: &Enum) -> bool {
         let mut values = HashSet::<u64>::new();
 
@@ -408,12 +394,10 @@ impl ApiParser {
         false
     }
 
-    ///
     /// check if an enum only has power of two values in it. This function calculate in percent how
     /// many values that happens to be power of two and returns true if it's a above a certain
     /// threshold. The reason for this is that some enums also combinations of other values
     /// so it's not possible to *only* check for single power of two values.
-    ///
     fn check_power_of_two(enum_def: &Enum) -> bool {
         if enum_def.entries.is_empty() {
             return false;
@@ -431,9 +415,7 @@ impl ApiParser {
         percent > 0.5
     }
 
-    ///
     /// Figures out the type of enum
-    ///
     fn determine_enum_type(enum_def: &Enum) -> EnumType {
         // if all number is in a single linear sequence. This currently misses if
         // valid "breaks" in sequences
@@ -469,9 +451,7 @@ impl ApiParser {
         func
     }
 
-    ///
     /// Fill struct def
-    ///
     fn fill_struct(chunk: Pair<Rule>, doc_comments: &[String], def_file: &str) -> Struct {
         let mut sdef = Struct {
             doc_comments: doc_comments.to_owned(),
@@ -497,9 +477,7 @@ impl ApiParser {
         sdef
     }
 
-    ///
     /// Get attributes for a struct
-    ///
     fn get_attrbutes(rule: Pair<Rule>) -> Vec<String> {
         let mut attribs = Vec::new();
         for entry in rule.into_inner() {
@@ -511,34 +489,13 @@ impl ApiParser {
         attribs
     }
 
-    ///
-    /// Get attributes for a struct
-    ///
-    /*
-    fn get_derive_list(rule: Pair<Rule>) -> Vec<String> {
-    let mut attribs = Vec::new();
-    for entry in rule.into_inner() {
-    if entry.as_rule() == Rule::namelist {
-    attribs = Self::get_namelist_list(entry);
-    }
-    }
-
-    attribs
-    }
-    */
-
-    ///
     /// collect namelist (array) of strings
-    ///
     fn get_namelist_list(rule: Pair<Rule>) -> Vec<String> {
         rule.into_inner().map(|e| e.as_str().to_owned()).collect()
     }
 
-    ///
     /// Fill the entries in a struct
-    ///
     /// Returns tuple with two ararys for variables and functions
-    ///
     fn fill_field_list(rule: Pair<Rule>) -> (Vec<Variable>, Vec<Function>) {
         let mut var_entries = Vec::new();
         let mut func_entries = Vec::new();
@@ -577,6 +534,7 @@ impl ApiParser {
     /// Get data for function declaration
     ///
     fn get_function(rule: Pair<Rule>, doc_comments: &[String]) -> Function {
+        let mut is_static_func = false;
         let mut function = Function {
             doc_comments: doc_comments.to_owned(),
             ..Function::default()
@@ -585,22 +543,17 @@ impl ApiParser {
         for entry in rule.into_inner() {
             match entry.as_rule() {
                 Rule::name => function.name = entry.as_str().to_owned(),
-                Rule::static_typ => function.func_type = FunctionType::Static,
                 Rule::manual_typ => function.func_type = FunctionType::Manual,
-                Rule::varlist => function.function_args = Self::get_variable_list(entry),
+                Rule::varlist => {
+                    function.function_args = Self::get_variable_list(entry, is_static_func)
+                }
                 Rule::retexp => function.return_val = Some(Self::get_variable(entry, &Vec::new())),
+                Rule::static_typ => {
+                    function.func_type = FunctionType::Static;
+                    is_static_func = true;
+                }
                 _ => (),
             }
-        }
-
-        // if we don't have any function args we add self as first argument as we always have that
-        if function.function_args.is_empty() {
-            function.function_args.push(Variable {
-                name: "self".to_owned(),
-                vtype: VariableType::SelfType,
-                type_name: "self".to_owned(),
-                ..Variable::default()
-            });
         }
 
         function
@@ -609,12 +562,18 @@ impl ApiParser {
     ///
     /// Gather variable list
     ///
-    fn get_variable_list(rule: Pair<Rule>) -> Vec<Variable> {
-        let mut variables = vec![Variable {
-            name: "self".to_owned(),
-            vtype: VariableType::SelfType,
-            ..Variable::default()
-        }];
+    fn get_variable_list(rule: Pair<Rule>, is_static_func: bool) -> Vec<Variable> {
+        let mut variables;
+
+        if !is_static_func {
+            variables = vec![Variable {
+                name: "self".to_owned(),
+                vtype: VariableType::SelfType,
+                ..Variable::default()
+            }];
+        } else {
+            variables = Vec::new();
+        }
 
         let t = Vec::new();
 
@@ -757,9 +716,7 @@ impl ApiParser {
         entries
     }
 
-    ///
     /// Get enum
-    ///
     fn get_enum(doc_comments: &[String], rule: Pair<Rule>) -> EnumEntry {
         let mut name = String::new();
         let mut assign = None;
@@ -838,14 +795,6 @@ impl ApiParser {
         for api_def in api_defs.iter_mut() {
             for s in &mut api_def.structs {
                 for func in &mut s.functions {
-                    func.c_name = format!(
-                        "{}_{}_{}_impl",
-                        "",
-                        //crate::c_gen::C_API_SUFIX_FUNCS,
-                        s.name.to_snake_case(),
-                        func.name
-                    );
-
                     for arg in &mut func.function_args {
                         if enum_def_file_type.contains_key(&arg.type_name) {
                             arg.vtype = VariableType::Enum;
@@ -857,19 +806,15 @@ impl ApiParser {
     }
 }
 
-///
 /// Impl for struct. Mostly helper functions to make it easier to extract info
-///
 impl Struct {
-    ///
     /// Check if no wrapping class should be generated
-    ///
     pub fn has_attribute(&self, attrib: &str) -> bool {
         self.attributes.iter().any(|s| s == attrib)
     }
 }
 
-/// Helper functions for funtctions
+/// Helper functions for function
 impl Function {
     pub fn get_default_args(&self) -> Vec<&Variable> {
         self.function_args
@@ -888,6 +833,61 @@ impl Function {
 
     pub fn is_type_static(&self) -> bool {
         self.func_type == FunctionType::Static
+    }
+
+    // Returns a list of funuction arguments for C function
+    pub fn get_c_separated_arguments(&self, self_name: &str, c_prefix: &str) -> Vec<String> {
+        let mut args = Vec::with_capacity(self.function_args.len());
+
+        for arg in &self.function_args {
+            match arg.vtype {
+                VariableType::Str => args.push(format!("const char* {}", arg.name)),
+
+                _ => match arg.array {
+                    None => args.push(format!(
+                        "{} {}",
+                        arg.get_c_variable(self_name, c_prefix),
+                        arg.name
+                    )),
+
+                    Some(ArrayType::Unsized) => {
+                        args.push(format!(
+                            "{}* {}",
+                            arg.get_c_variable(self_name, c_prefix),
+                            arg.name
+                        ));
+                        args.push(format!("uint32_t {}_size", arg.name));
+                    }
+
+                    Some(ArrayType::SizedArray(ref size)) => {
+                        args.push(format!(
+                            "{} {}[{}]",
+                            arg.get_c_variable(self_name, c_prefix),
+                            arg.name,
+                            size
+                        ));
+                    }
+                },
+            }
+        }
+
+        args
+    }
+
+    pub fn get_c_arguments(&self, self_name: &str, c_prefix: &str) -> String {
+        let args = self.get_c_separated_arguments(self_name, c_prefix);
+
+        let mut output = String::with_capacity(256);
+
+        for (i, a) in args.iter().enumerate() {
+            if i > 0 {
+                output.push_str(", ")
+            }
+
+            output.push_str(&a);
+        }
+
+        output
     }
 }
 
@@ -912,6 +912,36 @@ impl Variable {
                 }
             }
         }
+    }
+
+    fn get_c_variable(&self, self_type: &str, c_prefix: &str) -> String {
+        let mut output = String::with_capacity(256);
+
+        // TODO: If self type is a struct we should add struct at the front
+
+        match self.type_modifier {
+            TypeModifier::ConstPointer => output.push_str("const "),
+            TypeModifier::Reference => output.push_str("const "),
+            _ => (),
+        }
+
+        match self.vtype {
+            VariableType::None => output.push_str("void"),
+            VariableType::SelfType => output.push_str(&format!("{}{}", c_prefix, self_type)),
+            VariableType::Regular => output.push_str(&format!("{}{}", c_prefix, self.type_name)),
+            VariableType::Enum => output.push_str(&format!("{}{}", c_prefix, self.type_name)),
+            VariableType::Str => output.push_str("const char*"),
+            VariableType::Primitive => output.push_str(&self.get_c_primitive_type()),
+        }
+
+        match self.type_modifier {
+            TypeModifier::ConstPointer => output.push('*'),
+            TypeModifier::MutPointer => output.push('*'),
+            TypeModifier::Reference => output.push('*'),
+            _ => (),
+        }
+
+        output
     }
 }
 
