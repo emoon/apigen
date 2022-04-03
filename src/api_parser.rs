@@ -1,12 +1,14 @@
 use heck::ToSnakeCase;
-use pest::iterators::Pair;
-use pest::Parser;
+use pest::{iterators::Pair, Parser};
 use pest_derive::Parser;
-use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
-use std::fs::File;
-use std::io::Read;
-use std::path::Path;
+use std::{
+    borrow::Cow,
+    collections::{HashMap, HashSet},
+    fs::File,
+    io::Read,
+    path::Path,
+};
+use thiserror::Error;
 
 //#[cfg(debug_assertions)]
 const _GRAMMAR: &str = include_str!("api.pest");
@@ -252,6 +254,20 @@ pub struct ApiDef {
     pub enums: Vec<Enum>,
 }
 
+#[derive(Error, Debug)]
+pub enum ApigenError {
+    #[error("data store disconnected")]
+    Disconnect(#[from] std::io::Error),
+    #[error("the data for key `{0}` is not available")]
+    Redaction(String),
+    #[error("invalid header (expected {expected:?}, found {found:?})")]
+    InvalidHeader { expected: String, found: String },
+    #[error("unknown data store error")]
+    Unknown,
+}
+
+pub type Result<T> = std::result::Result<T, ApigenError>;
+
 ///
 /// Checks if name is a primitive
 ///
@@ -267,29 +283,26 @@ pub struct ApiParser;
 /// Build struct info for a parsed API def file
 ///
 impl ApiParser {
-    pub fn parse_file<P: AsRef<Path>>(path: P, api_def: &mut ApiDef) {
+    pub fn parse_file<P: AsRef<Path>>(path: P) -> Result<ApiDef> {
         let mut buffer = String::new();
-
-        let pathname = path.as_ref().to_str().unwrap();
-
-        let mut f = File::open(pathname)
-            .unwrap_or_else(|e| panic!("ApiParser: Unable to open {}: {}", pathname, e));
-        f.read_to_string(&mut buffer)
-            .unwrap_or_else(|e| panic!("ApiParser: Unable to read from {}: {}", pathname, e));
-
-        Self::parse_string(&buffer, pathname, api_def);
+        let mut f = File::open(&path)?;
+        f.read_to_string(&mut buffer)?;
+        Self::parse_string(&buffer, path.as_ref().to_str().unwrap())
     }
 
-    pub fn parse_string(buffer: &str, filename: &str, api_def: &mut ApiDef) {
+    pub fn parse_string(buffer: &str, filename: &str) -> Result<ApiDef> {
+        let mut api_def = ApiDef::default();
+
         let chunks = ApiParser::parse(Rule::chunk, buffer)
             .unwrap_or_else(|e| panic!("APiParser: {} {}", filename, e));
 
-        let base_filename = Path::new(filename).file_name().unwrap().to_str().unwrap();
-        let base_filename = &base_filename[..base_filename.len() - 4];
-        let mut current_comments = Vec::new();
+        if let Some(base_name) = Path::new(filename).file_stem() {
+            let base_filename = base_name.to_str().unwrap();
+            api_def.filename = filename.to_owned();
+            api_def.base_filename = base_filename.to_owned();
+        }
 
-        api_def.filename = filename.to_owned();
-        api_def.base_filename = base_filename.to_owned();
+        let mut current_comments = Vec::new();
 
         for chunk in chunks {
             match chunk.as_rule() {
@@ -322,7 +335,7 @@ impl ApiParser {
 
                 Rule::enumdef => {
                     let mut enum_def = Enum {
-                        def_file: base_filename.to_owned(),
+                        def_file: "".to_owned(), // TODO: fixme
                         doc_comments: current_comments.to_owned(),
                         ..Default::default()
                     };
@@ -352,6 +365,8 @@ impl ApiParser {
                 _ => (),
             }
         }
+
+        Ok(api_def)
     }
     ///
     /// Check if the enum values are in a single sequnce
@@ -820,36 +835,6 @@ impl ApiParser {
                     for arg in &mut func.function_args {
                         if enum_def_file_type.contains_key(&arg.type_name) {
                             arg.vtype = VariableType::Enum;
-                        }
-                    }
-                }
-            }
-        }
-
-        // Patch up so handle types are marked as such
-
-        for api_def in api_defs.iter_mut() {
-            for s in &mut api_def.structs {
-                let is_handle_type = s.has_attribute("Handle");
-                for func in &mut s.functions {
-                    for arg in &mut func.function_args {
-                        //if arg.type_name == s.name || arg.type_name == "self" {
-                        if arg.type_name == s.name {
-                            arg.is_handle_type = is_handle_type;
-                        }
-
-                        if empty_structs.contains(&arg.type_name) {
-                            arg.is_empty_struct = true;
-                        }
-                    }
-
-                    if let Some(ret_var) = func.return_val.as_mut() {
-                        if ret_var.type_name == s.name {
-                            ret_var.is_handle_type = is_handle_type;
-                        }
-
-                        if empty_structs.contains(&ret_var.type_name) {
-                            ret_var.is_empty_struct = true;
                         }
                     }
                 }
