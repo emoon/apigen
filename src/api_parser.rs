@@ -310,9 +310,8 @@ impl ApiParser {
 
                 Rule::moddef => {
                     for entry in chunk.into_inner() {
-                        match entry.as_rule() {
-                            Rule::name => api_def.mods.push(entry.as_str().to_owned()),
-                            _ => (),
+                        if entry.as_rule() == Rule::name {
+                            api_def.mods.push(entry.as_str().to_owned())
                         }
                     }
                 }
@@ -441,13 +440,12 @@ impl ApiParser {
         }
     }
 
-    fn fill_callback(chunk: Pair<Rule>, doc_comments: &Vec<String>) -> Function {
+    fn fill_callback(chunk: Pair<Rule>, doc_comments: &[String]) -> Function {
         let mut func = Function::default();
 
         for entry in chunk.into_inner() {
-            match entry.as_rule() {
-                Rule::function => func = Self::get_function(entry, &doc_comments),
-                _ => (),
+            if entry.as_rule() == Rule::function {
+                func = Self::get_function(entry, doc_comments);
             }
         }
 
@@ -457,7 +455,7 @@ impl ApiParser {
     ///
     /// Fill struct def
     ///
-    fn fill_struct(chunk: Pair<Rule>, doc_comments: &Vec<String>, def_file: &str) -> Struct {
+    fn fill_struct(chunk: Pair<Rule>, doc_comments: &[String], def_file: &str) -> Struct {
         let mut sdef = Struct {
             doc_comments: doc_comments.to_owned(),
             def_file: def_file.to_owned(),
@@ -561,7 +559,7 @@ impl ApiParser {
     ///
     /// Get data for function declaration
     ///
-    fn get_function(rule: Pair<Rule>, doc_comments: &Vec<String>) -> Function {
+    fn get_function(rule: Pair<Rule>, doc_comments: &[String]) -> Function {
         let mut function = Function {
             doc_comments: doc_comments.to_owned(),
             ..Function::default()
@@ -633,7 +631,7 @@ impl ApiParser {
     ///
     /// Get variable
     ///
-    fn get_variable(rule: Pair<Rule>, doc_comments: &Vec<String>) -> Variable {
+    fn get_variable(rule: Pair<Rule>, doc_comments: &[String]) -> Variable {
         let mut vtype = Rule::var;
         let mut var = Variable::default();
         let mut type_name = String::new();
@@ -737,7 +735,7 @@ impl ApiParser {
     ///
     /// Get enum
     ///
-    fn get_enum(doc_comments: &Vec<String>, rule: Pair<Rule>) -> EnumEntry {
+    fn get_enum(doc_comments: &[String], rule: Pair<Rule>) -> EnumEntry {
         let mut name = String::new();
         let mut assign = None;
 
