@@ -36,8 +36,6 @@ pub enum VariableType {
     Str,
     /// Prmitive type (such as i32,u64,etc)
     Primitive,
-    /// Reference type
-    Reference,
 }
 
 ///
@@ -55,6 +53,19 @@ impl Default for ArrayType {
     fn default() -> ArrayType {
         ArrayType::Unsized
     }
+}
+
+/// Set if the type has a modifier on it (mutable pointer, const pointer or reference)
+#[derive(PartialEq, Debug, Clone)]
+pub enum TypeModifier {
+    // No modifier on the type
+    None,
+    // const pointer (i.e *const <type>)
+    ConstPointer,
+    // const pointer (i.e *<type>)
+    MutPointer,
+    // Refernce (i.e &type)
+    Reference,
 }
 
 ///
@@ -78,16 +89,10 @@ pub struct Variable {
     pub enum_type: EnumType,
     /// If variable is an array
     pub array: Option<ArrayType>,
+    /// If the variable has a type modifier (such as pointer, ref, etc)
+    pub type_modifier: TypeModifier,
     /// If variable is optional (nullable)
     pub optional: bool,
-    /// Type is a mutable pointer
-    pub pointer: bool,
-    /// Type is a const pointer
-    pub const_pointer: bool,
-    /// If the type is a Handle (attribute set on struct)
-    pub is_handle_type: bool,
-    /// If this type is a struct
-    pub is_empty_struct: bool,
 }
 
 ///
@@ -105,10 +110,7 @@ impl Default for Variable {
             default_value: String::new(),
             array: None,
             optional: false,
-            pointer: false,
-            const_pointer: false,
-            is_handle_type: false,
-            is_empty_struct: false,
+            type_modifier: TypeModifier::None,
         }
     }
 }
@@ -118,9 +120,9 @@ impl Default for Variable {
 ///
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum FunctionType {
-    /// This is a regular function in a Qt Class
+    /// This is a regular function
     Regular,
-    /// Static function is that doesn't belong to a class
+    /// Static function
     Static,
     /// Function that is manually implemented in some cases
     Manual,
@@ -692,8 +694,6 @@ impl ApiParser {
 
         // match up with the correct type
         let var_type = match vtype {
-            Rule::refexp => VariableType::Reference,
-            //Rule::pointer_exp => VariableType::Reference,
             _ => {
                 if type_name == "String" {
                     VariableType::Str
@@ -705,12 +705,11 @@ impl ApiParser {
             }
         };
 
-        if vtype == Rule::pointer_exp {
-            var.pointer = true;
-        }
-
-        if vtype == Rule::const_ptr_exp {
-            var.const_pointer = true;
+        match vtype {
+            Rule::pointer_exp => var.type_modifier = TypeModifier::MutPointer,
+            Rule::const_ptr_exp => var.type_modifier = TypeModifier::MutPointer,
+            Rule::refexp => var.type_modifier = TypeModifier::Reference,
+            _ => (),
         }
 
         var.type_name = type_name;
@@ -744,6 +743,17 @@ impl ApiParser {
             }
         }
 
+        let mut counter = 0;
+
+        for e in &mut entries {
+            if e.value == u64::MAX {
+                e.value = counter;
+                counter += 1;
+            } else {
+                counter = e.value + 1;
+            }
+        }
+
         entries
     }
 
@@ -771,7 +781,11 @@ impl ApiParser {
                 value,
             }
         } else {
-            panic!("Should not be here")
+            EnumEntry {
+                doc_comments: doc_comments.to_owned(),
+                name,
+                value: u64::MAX, // TODO: Reassigned at patchup
+            }
         }
     }
 
