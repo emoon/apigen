@@ -27,7 +27,7 @@ retexp       = { ("->") ~ (const_ptr_exp | refexp | pointer_exp)? ~ (vtype | arr
 var          = { name ~ (":") ~ (const_ptr_exp | refexp | pointer_exp)? ~ (vtype | array) ~ default_val? }
 varlist      = { (var | array) ~ ((",") ~ (var | array))* }
 enum_assign  = { ("=") ~ name_or_num }
-enum_type    = { name ~ enum_assign }
+enum_type    = { name ~ enum_assign? }
 namelist     = { name ~ ((",") ~ name)* }
 function     = { (manual_typ | static_typ | drop_typ)*? ~ name ~ ("(") ~ varlist? ~ (")") ~ retexp? }
 
