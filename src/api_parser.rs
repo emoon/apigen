@@ -370,7 +370,14 @@ impl ApiParser {
                         match entry.as_rule() {
                             Rule::name => const_value.name = entry.as_str().to_owned(),
                             Rule::name_or_num => const_value.value = entry.as_str().to_owned(),
-                            Rule::raw_string => const_value.value = entry.as_str().to_owned(),
+                            Rule::raw_string => {
+                                const_value.value = entry
+                                    .into_inner()
+                                    .next()
+                                    .map(|e| e.as_str())
+                                    .unwrap()
+                                    .to_owned()
+                            }
                             _ => (),
                         }
                     }
@@ -893,12 +900,14 @@ impl ApiDef {
     // Generates the constast _C_MANUAL data to output and patches {CPrefix} with c_prefix input
     pub fn write_c_manual<W: Write>(&self, out: &mut W, c_prefix: &str) -> Result<()> {
         for c in &self.consts {
-            if c.name != "_C_MANUAL" {
+            dbg!(&c.name);
+
+            if c.name != "_MANUAL_C" {
                 continue;
             }
 
             let t = c.value.replace("{CPrefix}", c_prefix);
-            write!(out, "{}", t)?
+            write!(out, "\n{}\n", t)?
         }
 
         Ok(())
@@ -943,11 +952,17 @@ impl Function {
                 VariableType::Str => args.push(format!("const char* {}", arg.name)),
 
                 _ => match arg.array {
-                    None => args.push(format!(
-                        "{} {}",
-                        arg.get_c_variable(self_name, c_prefix),
-                        arg.name
-                    )),
+                    None => {
+                        if arg.name != "va_args" && arg.type_name != "VA_ARGS" {
+                            args.push(format!(
+                                "{} {}",
+                                arg.get_c_variable(self_name, c_prefix),
+                                arg.name
+                            ));
+                        } else {
+                            args.push("...".to_owned());
+                        }
+                    }
 
                     Some(ArrayType::Unsized) => {
                         args.push(format!(
@@ -1060,7 +1075,7 @@ impl Variable {
         match self.array {
             None => output.push_str(&format!(" {};", self.name)),
             Some(ArrayType::Unsized) => {
-                output.push_str(&format!(" {};\n", self.name));
+                output.push_str(&format!("* {};\n", self.name));
                 output.push_str(&format!("    uint64_t {}_size;", self.name));
             }
 
