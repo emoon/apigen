@@ -1,11 +1,11 @@
-use heck::ToSnakeCase;
+//use heck::ToSnakeCase;
 use pest::{iterators::Pair, Parser};
 use pest_derive::Parser;
 use std::{
     borrow::Cow,
     collections::{HashMap, HashSet},
     fs::File,
-    io::Read,
+    io::{Read, Write},
     path::Path,
 };
 use thiserror::Error;
@@ -600,12 +600,9 @@ impl ApiParser {
                 Rule::field_u => {
                     let field = entry.clone().into_inner().next().unwrap();
 
-                    match field.as_rule() {
-                        Rule::var => {
-                            var_entries.push(Self::get_variable(field, &doc_comments));
-                            doc_comments.clear();
-                        }
-                        _ => (),
+                    if field.as_rule() == Rule::var {
+                        var_entries.push(Self::get_variable(field, &doc_comments));
+                        doc_comments.clear();
                     }
                 }
 
@@ -744,16 +741,12 @@ impl ApiParser {
         }
 
         // match up with the correct type
-        let var_type = match vtype {
-            _ => {
-                if type_name == "String" {
-                    VariableType::Str
-                } else if is_primitve(&type_name) {
-                    VariableType::Primitive
-                } else {
-                    VariableType::Regular
-                }
-            }
+        let var_type = if type_name == "String" {
+            VariableType::Str
+        } else if is_primitve(&type_name) {
+            VariableType::Primitive
+        } else {
+            VariableType::Regular
         };
 
         match vtype {
@@ -896,6 +889,22 @@ impl ApiParser {
     }
 }
 
+impl ApiDef {
+    // Generates the constast _C_MANUAL data to output and patches {CPrefix} with c_prefix input
+    pub fn write_c_manual<W: Write>(&self, out: &mut W, c_prefix: &str) -> Result<()> {
+        for c in &self.consts {
+            if c.name != "_C_MANUAL" {
+                continue;
+            }
+
+            let t = c.value.replace("{CPrefix}", c_prefix);
+            write!(out, "{}", t)?
+        }
+
+        Ok(())
+    }
+}
+
 /// Impl for struct. Mostly helper functions to make it easier to extract info
 impl Struct {
     /// Check if no wrapping class should be generated
@@ -974,7 +983,7 @@ impl Function {
                 output.push_str(", ")
             }
 
-            output.push_str(&a);
+            output.push_str(a);
         }
 
         output
@@ -1051,7 +1060,7 @@ impl Variable {
         match self.array {
             None => output.push_str(&format!(" {};", self.name)),
             Some(ArrayType::Unsized) => {
-                output.push_str(&format!("* {};\n", self.name));
+                output.push_str(&format!(" {};\n", self.name));
                 output.push_str(&format!("    uint64_t {}_size;", self.name));
             }
 

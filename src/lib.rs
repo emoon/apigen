@@ -50,7 +50,7 @@ pub fn parse_files<P: AsRef<Path>>(path: P, print_process: bool) -> Result<Vec<A
 }
 
 /// Hepler function to write C style comments
-pub fn write_c_commments<W: Write>(f: &mut W, comments: &Vec<String>, indent: usize) -> Result<()> {
+pub fn write_c_commments<W: Write>(f: &mut W, comments: &[String], indent: usize) -> Result<()> {
     for c in comments {
         writeln!(f, "{:indent$}// {}", "", c, indent = indent)?;
     }
