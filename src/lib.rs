@@ -1,4 +1,5 @@
 use rayon::prelude::*;
+use std::io::Write;
 use std::{path::Path, sync::RwLock};
 use walkdir::WalkDir;
 
@@ -46,4 +47,13 @@ pub fn parse_files<P: AsRef<Path>>(path: P, print_process: bool) -> Result<Vec<A
     data.sort_by(|a, b| a.filename.cmp(&b.filename));
 
     Ok(data)
+}
+
+/// Hepler function to write C style comments
+pub fn write_c_commments<W: Write>(f: &mut W, comments: &Vec<String>, indent: usize) -> Result<()> {
+    for c in comments {
+        writeln!(f, "{:indent$}// {}", "", c, indent = indent)?;
+    }
+
+    Ok(())
 }

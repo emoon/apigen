@@ -1,10 +1,15 @@
-chunk = _{ SOI ~ (structdef | moddef | callbackdef | enumdef | doc_comment)+ ~ EOI }
+chunk = _{ SOI ~ (type_value | const_value | structdef | uniondef | moddef | callbackdef | enumdef | doc_comment)+ ~ EOI }
 
 structdef   =  { attributes? ~ traits? ~ ("struct") ~ name ~ derive? ~ ("{") ~ fieldlist? ~ ("}") }
+uniondef    =  { attributes? ~ traits? ~ ("union") ~ name ~ ("{") ~ fieldlist_u? ~ ("}") }
 callbackdef =  { ("callback") ~ function }
 moddef      =  { ("mod") ~ name }
+const_value =  { "const" ~ name ~ "=" ~ name_or_num? ~ raw_string? }
+type_value  =  { "type" ~ name ~ "=" ~ name }
 enumdef     =  { (attributes | enum_flags)*? ~ ("enum") ~ name ~ ("{") ~ fieldlist? ~ ("}") }
 fieldlist   =  { (doc_comment | field)*  }
+fieldlist_u =  { (doc_comment | field_u)*  }
+field_u     =  { var ~ fieldsep? }
 field       =  { (var | function | enum_type) ~ fieldsep? }
 fieldsep    = _{ (",") }
 
@@ -41,6 +46,14 @@ name_with_namespace = @{
 
 name_or_num = @{
 	(('a'..'z') | ('A'..'Z') | ("_") | ('0'..'9'))*
+}
+
+raw_string = {
+    "\"" ~ raw_string_interior ~ "\""
+}
+
+raw_string_interior = {
+    (!("\"") ~ ANY)*
 }
 
 string = @{

@@ -143,9 +143,7 @@ pub struct Function {
     pub func_type: FunctionType,
 }
 
-///
 /// Default implementation for Function
-///
 impl Default for Function {
     fn default() -> Self {
         Function {
@@ -159,9 +157,7 @@ impl Default for Function {
     }
 }
 
-///
 /// Holds the data for a struct
-///
 #[derive(Debug, Default)]
 pub struct Struct {
     /// Docummentanion
@@ -180,9 +176,7 @@ pub struct Struct {
     pub traits: Vec<String>,
 }
 
-///
 /// C/C++ style enum
-///
 #[derive(Debug)]
 pub struct EnumEntry {
     /// Documentation
@@ -193,10 +187,8 @@ pub struct EnumEntry {
     pub value: u64,
 }
 
-///
 /// Enums in C++ can have same value for different enum ids. This isn't supported in Rust.
 /// Also Rust doesn't support that your "or" enums flags so we need to handle that.
-///
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum EnumType {
     /// All values are in sequantial order and no overlap
@@ -211,9 +203,7 @@ impl Default for EnumType {
     }
 }
 
-///
 /// Enum type
-///
 #[derive(Debug, Default)]
 pub struct Enum {
     /// Documentation
@@ -230,9 +220,40 @@ pub struct Enum {
     pub entries: Vec<EnumEntry>,
 }
 
-///
+// Type type
+#[derive(Debug, Default)]
+pub struct Type {
+    /// Documentation
+    pub doc_comments: Vec<String>,
+    /// Name of the type
+    pub name: String,
+    /// Type of the type def
+    pub type_name: String,
+}
+
+// Union type
+#[derive(Debug, Default)]
+pub struct Union {
+    /// Documentation
+    pub doc_comments: Vec<String>,
+    /// Name of the type
+    pub name: String,
+    /// Entries
+    pub entries: Vec<Variable>,
+}
+
+// Union type
+#[derive(Debug, Default)]
+pub struct Const {
+    /// Documentation
+    pub doc_comments: Vec<String>,
+    /// Name of the type
+    pub name: String,
+    /// Data
+    pub value: String,
+}
+
 /// Api definition for a file
-///
 #[derive(Debug, Default)]
 pub struct ApiDef {
     /// full filename path
@@ -247,6 +268,12 @@ pub struct ApiDef {
     pub structs: Vec<Struct>,
     /// Enums
     pub enums: Vec<Enum>,
+    /// Types
+    pub types: Vec<Type>,
+    /// Unions
+    pub unions: Vec<Union>,
+    /// Consts
+    pub consts: Vec<Const>,
 }
 
 #[derive(Error, Debug)]
@@ -320,6 +347,37 @@ impl ApiParser {
                     }
                 }
 
+                Rule::type_value => {
+                    let mut type_value = Type::default();
+
+                    for entry in chunk.into_inner() {
+                        if entry.as_rule() == Rule::name {
+                            if type_value.name.is_empty() {
+                                type_value.name = entry.as_str().to_owned();
+                            } else {
+                                type_value.type_name = entry.as_str().to_owned();
+                            }
+                        }
+                    }
+
+                    api_def.types.push(type_value);
+                }
+
+                Rule::const_value => {
+                    let mut const_value = Const::default();
+
+                    for entry in chunk.into_inner() {
+                        match entry.as_rule() {
+                            Rule::name => const_value.name = entry.as_str().to_owned(),
+                            Rule::name_or_num => const_value.value = entry.as_str().to_owned(),
+                            Rule::raw_string => const_value.value = entry.as_str().to_owned(),
+                            _ => (),
+                        }
+                    }
+
+                    api_def.consts.push(const_value);
+                }
+
                 Rule::doc_comment => {
                     current_comments.push(chunk.as_str()[4..].to_owned());
                 }
@@ -351,6 +409,26 @@ impl ApiParser {
                     // Figure out enum type
                     enum_def.enum_type = Self::determine_enum_type(&enum_def);
                     api_def.enums.push(enum_def);
+                }
+
+                Rule::uniondef => {
+                    let mut union_def = Union {
+                        doc_comments: current_comments.to_owned(),
+                        ..Default::default()
+                    };
+                    current_comments.clear();
+
+                    for entry in chunk.into_inner() {
+                        match entry.as_rule() {
+                            Rule::name => union_def.name = entry.as_str().to_owned(),
+                            Rule::fieldlist_u => {
+                                union_def.entries = Self::fill_field_list(entry).0;
+                            }
+                            _ => (),
+                        }
+                    }
+
+                    api_def.unions.push(union_def);
                 }
 
                 _ => (),
@@ -519,8 +597,22 @@ impl ApiParser {
                     }
                 }
 
+                Rule::field_u => {
+                    let field = entry.clone().into_inner().next().unwrap();
+
+                    match field.as_rule() {
+                        Rule::var => {
+                            var_entries.push(Self::get_variable(field, &doc_comments));
+                            doc_comments.clear();
+                        }
+                        _ => (),
+                    }
+                }
+
                 Rule::doc_comment => {
-                    doc_comments.push(entry.as_str()[4..].to_owned());
+                    if entry.as_str().len() >= 4 {
+                        doc_comments.push(entry.as_str()[4..].to_owned());
+                    }
                 }
 
                 _ => (),
@@ -676,9 +768,7 @@ impl ApiParser {
         var
     }
 
-    ///
     /// Get array of enums
-    ///
     fn fill_field_list_enum(rule: Pair<Rule>) -> Vec<EnumEntry> {
         let mut entries = Vec::new();
         let mut doc_comments = Vec::new();
@@ -856,7 +946,7 @@ impl Function {
                             arg.get_c_variable(self_name, c_prefix),
                             arg.name
                         ));
-                        args.push(format!("uint32_t {}_size", arg.name));
+                        args.push(format!("uint64_t {}_size", arg.name));
                     }
 
                     Some(ArrayType::SizedArray(ref size)) => {
@@ -889,6 +979,14 @@ impl Function {
 
         output
     }
+
+    pub fn get_c_return_value(&self, c_prefix: &str) -> Cow<str> {
+        if let Some(ret) = self.return_val.as_ref() {
+            ret.get_c_variable("", c_prefix).into()
+        } else {
+            "void".into()
+        }
+    }
 }
 
 ///
@@ -914,7 +1012,7 @@ impl Variable {
         }
     }
 
-    fn get_c_variable(&self, self_type: &str, c_prefix: &str) -> String {
+    pub fn get_c_variable(&self, self_type: &str, c_prefix: &str) -> String {
         let mut output = String::with_capacity(256);
 
         // TODO: If self type is a struct we should add struct at the front
@@ -927,7 +1025,7 @@ impl Variable {
 
         match self.vtype {
             VariableType::None => output.push_str("void"),
-            VariableType::SelfType => output.push_str(&format!("{}{}", c_prefix, self_type)),
+            VariableType::SelfType => output.push_str(&format!("struct {}{}", c_prefix, self_type)),
             VariableType::Regular => output.push_str(&format!("{}{}", c_prefix, self.type_name)),
             VariableType::Enum => output.push_str(&format!("{}{}", c_prefix, self.type_name)),
             VariableType::Str => output.push_str("const char*"),
@@ -939,6 +1037,27 @@ impl Variable {
             TypeModifier::MutPointer => output.push('*'),
             TypeModifier::Reference => output.push('*'),
             _ => (),
+        }
+
+        output
+    }
+
+    pub fn get_c_struct_variable(&self, c_prefix: &str) -> String {
+        let mut output = String::with_capacity(256);
+
+        output.push_str(&format!("    {}", self.get_c_variable("", c_prefix)));
+
+        // for arrays we generate a pointer and a size
+        match self.array {
+            None => output.push_str(&format!(" {};", self.name)),
+            Some(ArrayType::Unsized) => {
+                output.push_str(&format!("* {};\n", self.name));
+                output.push_str(&format!("    uint64_t {}_size;", self.name));
+            }
+
+            Some(ArrayType::SizedArray(ref size)) => {
+                output.push_str(&format!(" {}[{}];", self.name, size));
+            }
         }
 
         output
@@ -958,26 +1077,39 @@ mod tests {
         assert_eq!(is_primitve("dummy"), false);
     }
 
-    ///
-    /// Make sure parsing of "struct Widget { show() }"
-    ///
     #[test]
-    fn test_basic_class_struct() {
-        /*
-        let mut api_def = ApiDef::default();
-        ApiParser::parse_string(
-            "struct Widget { show() }",
-            "dummy_filename.def",
-            &mut api_def,
-        );
-        assert_eq!(api_def.structs.is_empty(), true);
-        assert_eq!(api_def.structs.is_empty(), false);
+    fn test_type() {
+        let def = ApiParser::parse_string("type MetadataId = u64", "metadata.def").unwrap();
+        assert_eq!(def.types.len(), 1);
+        assert_eq!(def.types[0].name, "MetadataId");
+        assert_eq!(def.types[0].type_name, "u64");
+    }
 
-        let sdef = &api_def.structs[0];
+    #[test]
+    fn test_union() {
+        let d = ApiParser::parse_string("union Test { foo: u64, bar: u32 }", "union.def").unwrap();
+        assert_eq!(d.unions.len(), 1);
+        assert_eq!(d.unions[0].name, "Test");
+        assert_eq!(d.unions[0].entries.len(), 2);
+        assert_eq!(d.unions[0].entries[0].name, "foo");
+        assert_eq!(d.unions[0].entries[0].type_name, "u64");
+        assert_eq!(d.unions[0].entries[1].name, "bar");
+        assert_eq!(d.unions[0].entries[1].type_name, "u32");
+    }
 
-        assert_eq!(sdef.name, "Widget");
-        assert_eq!(sdef.functions.len(), 1);
-        assert_eq!(sdef.functions[0].name, "show");
-        */
+    #[test]
+    fn test_const() {
+        let def = ApiParser::parse_string("const FOOBAR = \"test\"", "const.def").unwrap();
+        assert_eq!(def.consts.len(), 1);
+        assert_eq!(def.consts[0].name, "FOOBAR");
+        assert_eq!(def.consts[0].value, "\"test\"");
+    }
+
+    #[test]
+    fn test_const_2() {
+        let def = ApiParser::parse_string("const FOOBAR = 0x123", "const.def").unwrap();
+        assert_eq!(def.consts.len(), 1);
+        assert_eq!(def.consts[0].name, "FOOBAR");
+        assert_eq!(def.consts[0].value, "0x123");
     }
 }
