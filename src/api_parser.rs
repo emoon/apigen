@@ -370,14 +370,7 @@ impl ApiParser {
                         match entry.as_rule() {
                             Rule::name => const_value.name = entry.as_str().to_owned(),
                             Rule::name_or_num => const_value.value = entry.as_str().to_owned(),
-                            Rule::raw_string => {
-                                const_value.value = entry
-                                    .into_inner()
-                                    .next()
-                                    .map(|e| e.as_str())
-                                    .unwrap()
-                                    .to_owned()
-                            }
+                            Rule::raw_string => const_value.value = entry.as_str().to_owned(),
                             _ => (),
                         }
                     }
@@ -907,7 +900,7 @@ impl ApiDef {
             }
 
             let t = c.value.replace("{CPrefix}", c_prefix);
-            write!(out, "\n{}\n", t)?
+            write!(out, "\n{}\n", &t[1..t.len() - 1])?
         }
 
         Ok(())
