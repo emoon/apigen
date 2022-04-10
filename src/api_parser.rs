@@ -174,6 +174,8 @@ pub struct Struct {
     pub attributes: Vec<String>,
     /// Traits
     pub traits: Vec<String>,
+    /// List of derives
+    pub derives: Vec<String>,
 }
 
 /// C/C++ style enum
@@ -225,21 +227,8 @@ pub struct Enum {
 pub struct Type {
     /// Documentation
     pub doc_comments: Vec<String>,
-    /// Name of the type
-    pub name: String,
-    /// Type of the type def
-    pub type_name: String,
-}
-
-// Union type
-#[derive(Debug, Default)]
-pub struct Union {
-    /// Documentation
-    pub doc_comments: Vec<String>,
-    /// Name of the type
-    pub name: String,
-    /// Entries
-    pub entries: Vec<Variable>,
+    /// Variable that includes type and name
+    pub var: Variable,
 }
 
 // Union type
@@ -271,7 +260,7 @@ pub struct ApiDef {
     /// Types
     pub types: Vec<Type>,
     /// Unions
-    pub unions: Vec<Union>,
+    pub unions: Vec<Struct>,
     /// Consts
     pub consts: Vec<Const>,
 }
@@ -351,16 +340,14 @@ impl ApiParser {
                     let mut type_value = Type::default();
 
                     for entry in chunk.into_inner() {
-                        if entry.as_rule() == Rule::name {
-                            if type_value.name.is_empty() {
-                                type_value.name = entry.as_str().to_owned();
-                            } else {
-                                type_value.type_name = entry.as_str().to_owned();
-                            }
+                        if entry.as_rule() == Rule::var {
+                            type_value.var = Self::get_variable(entry, &current_comments);
                         }
                     }
 
                     api_def.types.push(type_value);
+
+                    current_comments.clear();
                 }
 
                 Rule::const_value => {
@@ -412,22 +399,9 @@ impl ApiParser {
                 }
 
                 Rule::uniondef => {
-                    let mut union_def = Union {
-                        doc_comments: current_comments.to_owned(),
-                        ..Default::default()
-                    };
+                    let union_def =
+                        Self::fill_struct(chunk, &current_comments, &api_def.base_filename);
                     current_comments.clear();
-
-                    for entry in chunk.into_inner() {
-                        match entry.as_rule() {
-                            Rule::name => union_def.name = entry.as_str().to_owned(),
-                            Rule::fieldlist_u => {
-                                union_def.entries = Self::fill_field_list(entry).0;
-                            }
-                            _ => (),
-                        }
-                    }
-
                     api_def.unions.push(union_def);
                 }
 
@@ -541,6 +515,7 @@ impl ApiParser {
             match entry.as_rule() {
                 Rule::name => sdef.name = entry.as_str().to_owned(),
                 Rule::attributes => sdef.attributes = Self::get_attrbutes(entry),
+                Rule::derive => sdef.derives = Self::get_attrbutes(entry),
                 Rule::traits => sdef.traits = Self::get_attrbutes(entry),
                 Rule::fieldlist => {
                     let (var_entries, func_entries) = Self::fill_field_list(entry);
@@ -594,15 +569,6 @@ impl ApiParser {
                             doc_comments.clear();
                         }
                         _ => (),
-                    }
-                }
-
-                Rule::field_u => {
-                    let field = entry.clone().into_inner().next().unwrap();
-
-                    if field.as_rule() == Rule::var {
-                        var_entries.push(Self::get_variable(field, &doc_comments));
-                        doc_comments.clear();
                     }
                 }
 
@@ -893,8 +859,6 @@ impl ApiDef {
     // Generates the constast _C_MANUAL data to output and patches {CPrefix} with c_prefix input
     pub fn write_c_manual<W: Write>(&self, out: &mut W, c_prefix: &str) -> Result<()> {
         for c in &self.consts {
-            dbg!(&c.name);
-
             if c.name != "_MANUAL_C" {
                 continue;
             }
@@ -1123,10 +1087,10 @@ mod tests {
 
     #[test]
     fn test_type() {
-        let def = ApiParser::parse_string("type MetadataId = u64", "metadata.def").unwrap();
+        let def = ApiParser::parse_string("type MetadataId: u64", "metadata.def").unwrap();
         assert_eq!(def.types.len(), 1);
-        assert_eq!(def.types[0].name, "MetadataId");
-        assert_eq!(def.types[0].type_name, "u64");
+        assert_eq!(def.types[0].var.name, "MetadataId");
+        assert_eq!(def.types[0].var.type_name, "u64");
     }
 
     #[test]

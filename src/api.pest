@@ -1,15 +1,13 @@
 chunk = _{ SOI ~ (type_value | const_value | structdef | uniondef | moddef | callbackdef | enumdef | doc_comment)+ ~ EOI }
 
 structdef   =  { attributes? ~ traits? ~ ("struct") ~ name ~ derive? ~ ("{") ~ fieldlist? ~ ("}") }
-uniondef    =  { attributes? ~ traits? ~ ("union") ~ name ~ ("{") ~ fieldlist_u? ~ ("}") }
+uniondef    =  { attributes? ~ traits? ~ ("union") ~ name ~ ("{") ~ fieldlist? ~ ("}") }
 callbackdef =  { ("callback") ~ function }
 moddef      =  { ("mod") ~ name }
 const_value =  { "const" ~ name ~ "=" ~ name_or_num? ~ raw_string? }
-type_value  =  { "type" ~ name ~ "=" ~ name }
+type_value  =  { "type" ~ var }
 enumdef     =  { (attributes | enum_flags)*? ~ ("enum") ~ name ~ ("{") ~ fieldlist? ~ ("}") }
 fieldlist   =  { (doc_comment | field)*  }
-fieldlist_u =  { (doc_comment | field_u)*  }
-field_u     =  { var ~ fieldsep? }
 field       =  { (var | function | enum_type) ~ fieldsep? }
 fieldsep    = _{ (",") }
 

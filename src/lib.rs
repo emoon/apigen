@@ -61,3 +61,33 @@ pub fn write_c_commments<W: Write>(f: &mut W, comments: &[String], indent: usize
 
     Ok(())
 }
+
+pub fn get_derived_structs<'a>(apis: &'a [ApiDef], s: &Struct) -> Vec<&'a Struct> {
+    let mut structs = Vec::with_capacity(s.derives.len());
+
+    for name in &s.derives {
+        for api in apis {
+            for sdef in &api.structs {
+                if sdef.name == *name {
+                    structs.push(sdef);
+                }
+            }
+        }
+    }
+
+    structs
+}
+
+/// Hepler function to write C style comments
+pub fn get_c_comments(comments: &[String], indent: usize) -> String {
+    let mut output = String::with_capacity(256);
+
+    for (i, c) in comments.iter().enumerate() {
+        if i > 0 {
+            output.push('\n');
+        }
+        output.push_str(&format!("{:indent$}// {}", "", c, indent = indent));
+    }
+
+    output
+}
