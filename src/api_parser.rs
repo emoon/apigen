@@ -1098,11 +1098,11 @@ mod tests {
         let d = ApiParser::parse_string("union Test { foo: u64, bar: u32 }", "union.def").unwrap();
         assert_eq!(d.unions.len(), 1);
         assert_eq!(d.unions[0].name, "Test");
-        assert_eq!(d.unions[0].entries.len(), 2);
-        assert_eq!(d.unions[0].entries[0].name, "foo");
-        assert_eq!(d.unions[0].entries[0].type_name, "u64");
-        assert_eq!(d.unions[0].entries[1].name, "bar");
-        assert_eq!(d.unions[0].entries[1].type_name, "u32");
+        assert_eq!(d.unions[0].variables.len(), 2);
+        assert_eq!(d.unions[0].variables[0].name, "foo");
+        assert_eq!(d.unions[0].variables[0].type_name, "u64");
+        assert_eq!(d.unions[0].variables[1].name, "bar");
+        assert_eq!(d.unions[0].variables[1].type_name, "u32");
     }
 
     #[test]
