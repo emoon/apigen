@@ -981,6 +981,33 @@ impl Function {
         args
     }
 
+    pub fn get_c_arg_names(&self, self_name: &str) -> String {
+        let mut output = String::with_capacity(256);
+
+        for (i, arg) in self.function_args.iter().enumerate() {
+            if i > 0 {
+                output.push_str(", ")
+            }
+
+            if let Some(array_type) = arg.array.as_ref() {
+                match array_type {
+                    ArrayType::Unsized => {
+                        output.push_str(&format!("{}, {}_size", arg.name, arg.name))
+                    }
+                    ArrayType::SizedArray(_size) => output.push_str(&arg.name),
+                }
+            } else {
+                if arg.vtype == VariableType::SelfType {
+                    output.push_str(self_name)
+                } else {
+                    output.push_str(&arg.name);
+                }
+            }
+        }
+
+        output
+    }
+
     pub fn get_c_arguments(&self, self_name: &str, c_prefix: &str) -> String {
         let args = self.get_c_separated_arguments(self_name, c_prefix);
 
