@@ -91,3 +91,17 @@ pub fn get_c_comments(comments: &[String], indent: usize) -> String {
 
     output
 }
+
+/// Hepler function to write C style comments
+pub fn get_rust_comments(comments: &[String], indent: usize) -> String {
+    let mut output = String::with_capacity(256);
+
+    for (i, c) in comments.iter().enumerate() {
+        if i > 0 {
+            output.push('\n');
+        }
+        output.push_str(&format!("{:indent$}/// {}", "", c, indent = indent));
+    }
+
+    output
+}

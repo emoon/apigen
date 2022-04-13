@@ -1050,6 +1050,45 @@ impl Variable {
         output
     }
 
+    pub fn get_primitive_type(&self) -> Cow<str> {
+        let tname = self.type_name.as_str();
+
+        match tname {
+            "void" => "core::ffi::c_void".into(),
+            _ => tname.into(),
+        }
+    }
+
+    pub fn get_ffi_type(&self, self_type: &str) -> String {
+        let mut output = String::with_capacity(256);
+
+        match self.vtype {
+            VariableType::None => output.push_str("core::ffi::c_void"),
+            VariableType::SelfType => output.push_str(&format!("*mut {}", self_type)),
+            VariableType::Regular => output.push_str(&format!("{}", self.type_name)),
+            VariableType::Enum => output.push_str(&format!("{}", self.type_name)),
+            VariableType::Str => output.push_str("*const c_char"),
+            VariableType::Primitive => output.push_str(&self.get_primitive_type()),
+        }
+
+        match self.array.as_ref() {
+            None => match self.type_modifier {
+                TypeModifier::ConstPointer => format!("*const {}", output),
+                TypeModifier::MutPointer => format!("*mut {}", output),
+                TypeModifier::Reference => format!("*const {}", output),
+                _ => output,
+            },
+
+            Some(ArrayType::Unsized) => {
+                format!("*const {}, {}_size: u64", output, self.name)
+            }
+
+            Some(ArrayType::SizedArray(size)) => {
+                format!("[{}; {}]", output, size)
+            }
+        }
+    }
+
     pub fn get_c_struct_variable(&self, c_prefix: &str) -> String {
         let mut output = String::with_capacity(256);
 
