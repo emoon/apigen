@@ -1054,7 +1054,7 @@ impl Variable {
         let tname = self.type_name.as_str();
 
         match tname {
-            "void" => "core::ffi::c_void".into(),
+            "void" => "c_void".into(),
             _ => tname.into(),
         }
     }
@@ -1063,7 +1063,7 @@ impl Variable {
         let mut output = String::with_capacity(256);
 
         match self.vtype {
-            VariableType::None => output.push_str("core::ffi::c_void"),
+            VariableType::None => output.push_str("c_void"),
             VariableType::SelfType => output.push_str(&format!("*mut {}", self_type)),
             VariableType::Regular => output.push_str(&format!("{}", self.type_name)),
             VariableType::Enum => output.push_str(&format!("{}", self.type_name)),
