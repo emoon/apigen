@@ -618,17 +618,15 @@ impl ApiParser {
     /// Gather variable list
     ///
     fn get_variable_list(rule: Pair<Rule>, is_static_func: bool) -> Vec<Variable> {
-        let mut variables;
-
-        if !is_static_func {
-            variables = vec![Variable {
+        let mut variables = if !is_static_func {
+            vec![Variable {
                 name: "self".to_owned(),
                 vtype: VariableType::SelfType,
                 ..Variable::default()
-            }];
+            }]
         } else {
-            variables = Vec::new();
-        }
+            Vec::new()
+        };
 
         let t = Vec::new();
 
@@ -960,12 +958,10 @@ impl Function {
                     }
                     ArrayType::SizedArray(_size) => output.push_str(&arg.name),
                 }
+            } else if arg.vtype == VariableType::SelfType {
+                output.push_str(self_name)
             } else {
-                if arg.vtype == VariableType::SelfType {
-                    output.push_str(self_name)
-                } else {
-                    output.push_str(&arg.name);
-                }
+                output.push_str(&arg.name);
             }
         }
 
@@ -1065,8 +1061,8 @@ impl Variable {
         match self.vtype {
             VariableType::None => output.push_str("c_void"),
             VariableType::SelfType => output.push_str(&format!("*mut {}", self_type)),
-            VariableType::Regular => output.push_str(&format!("{}", self.type_name)),
-            VariableType::Enum => output.push_str(&format!("{}", self.type_name)),
+            VariableType::Regular => output.push_str(&self.type_name),
+            VariableType::Enum => output.push_str(&self.type_name),
             VariableType::Str => output.push_str("*const c_char"),
             VariableType::Primitive => output.push_str(&self.get_primitive_type()),
         }
@@ -1116,12 +1112,12 @@ mod tests {
     use super::*;
     #[test]
     fn test_primitve_ok() {
-        assert_eq!(is_primitve("i32"), true);
+        assert!(is_primitve("i32"));
     }
 
     #[test]
     fn test_primitve_false() {
-        assert_eq!(is_primitve("dummy"), false);
+        assert!(is_primitve("dummy"));
     }
 
     #[test]
